@@ -6,43 +6,62 @@ import {
   isShopifyConfigured,
   removeCartLines,
   updateCartLines,
+  type Cart,
 } from "@/lib/shopify";
 
-export type CartActionState = { ok: boolean; message: string } | null;
+export type CartActionResult =
+  | { ok: true; cart: Cart }
+  | { ok: false; message: string };
 
-function errorMessage(err: unknown) {
-  return err instanceof Error ? err.message : "Something went wrong";
+function fail(err: unknown): CartActionResult {
+  return { ok: false, message: err instanceof Error ? err.message : "Something went wrong" };
 }
 
-export async function addToCart(
-  _prev: CartActionState,
-  formData: FormData,
-): Promise<CartActionState> {
+const MAX_QTY = 99;
+
+export async function addToCartAction(
+  merchandiseId: string,
+  quantity = 1,
+): Promise<CartActionResult> {
   if (!isShopifyConfigured()) return { ok: false, message: "Shopify isn't connected." };
-  const merchandiseId = String(formData.get("merchandiseId") ?? "");
-  const quantity = Math.max(1, Number(formData.get("quantity") ?? 1) || 1);
-  if (!merchandiseId) return { ok: false, message: "Pick a variant first." };
+  if (!merchandiseId?.startsWith("gid://shopify/ProductVariant/")) {
+    return { ok: false, message: "Pick a size or option first." };
+  }
+  const qty = Math.min(MAX_QTY, Math.max(1, Math.floor(quantity) || 1));
   try {
-    await addCartLines([{ merchandiseId, quantity }]);
+    const cart = await addCartLines([{ merchandiseId, quantity: qty }]);
     refresh();
-    return { ok: true, message: "Added to cart" };
+    return { ok: true, cart };
   } catch (err) {
-    return { ok: false, message: errorMessage(err) };
+    return fail(err);
   }
 }
 
-export async function updateLineQuantity(formData: FormData): Promise<void> {
-  const lineId = String(formData.get("lineId") ?? "");
-  const quantity = Number(formData.get("quantity"));
-  if (!lineId || !Number.isFinite(quantity)) return;
-  if (quantity <= 0) await removeCartLines([lineId]);
-  else await updateCartLines([{ id: lineId, quantity }]);
-  refresh();
+export async function updateLineAction(
+  lineId: string,
+  quantity: number,
+): Promise<CartActionResult> {
+  if (!lineId) return { ok: false, message: "Missing cart line." };
+  const qty = Math.min(MAX_QTY, Math.floor(quantity));
+  try {
+    const cart =
+      !Number.isFinite(qty) || qty <= 0
+        ? await removeCartLines([lineId])
+        : await updateCartLines([{ id: lineId, quantity: qty }]);
+    refresh();
+    return { ok: true, cart };
+  } catch (err) {
+    return fail(err);
+  }
 }
 
-export async function removeLine(formData: FormData): Promise<void> {
-  const lineId = String(formData.get("lineId") ?? "");
-  if (!lineId) return;
-  await removeCartLines([lineId]);
-  refresh();
+export async function removeLineAction(lineId: string): Promise<CartActionResult> {
+  if (!lineId) return { ok: false, message: "Missing cart line." };
+  try {
+    const cart = await removeCartLines([lineId]);
+    refresh();
+    return { ok: true, cart };
+  } catch (err) {
+    return fail(err);
+  }
 }

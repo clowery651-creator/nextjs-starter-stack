@@ -2,6 +2,8 @@
 
 import { ShopifyProvider } from "@shopify/hydrogen-react";
 import type { ReactNode } from "react";
+import { CartProvider } from "@/components/cart/cart-context";
+import type { Cart } from "@/lib/shopify/types";
 
 export type PublicShopConfig = {
   storeDomain: string;
@@ -10,19 +12,21 @@ export type PublicShopConfig = {
 } | null;
 
 /**
- * Wraps the app in Hydrogen React's ShopifyProvider (locale + store config
- * for <Money/>, useShop(), etc.). The token here is the PUBLIC Storefront
- * token, which is designed to be exposed to browsers. If Shopify isn't
- * configured we render children as-is (Hydrogen React falls back to en-US).
+ * Hydrogen React's ShopifyProvider (locale + store config for <Money/>,
+ * useShop(), etc.) and the optimistic cart. The token here is the PUBLIC
+ * Storefront token, which is designed to be exposed to browsers.
  */
 export function Providers({
   shop,
+  cartPromise,
   children,
 }: {
   shop: PublicShopConfig;
+  cartPromise: Promise<Cart | null>;
   children: ReactNode;
 }) {
-  if (!shop) return <>{children}</>;
+  const inner = <CartProvider cartPromise={cartPromise}>{children}</CartProvider>;
+  if (!shop) return inner;
   return (
     <ShopifyProvider
       storeDomain={shop.storeDomain}
@@ -31,7 +35,7 @@ export function Providers({
       countryIsoCode="US"
       languageIsoCode="EN"
     >
-      {children}
+      {inner}
     </ShopifyProvider>
   );
 }

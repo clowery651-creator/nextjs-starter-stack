@@ -1,79 +1,53 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
-import { Image, Money } from "@/components/hydrogen";
 import { ErrorBox, NotConfigured } from "@/components/not-configured";
-import { getProducts, isShopifyConfigured, type ProductCard } from "@/lib/shopify";
+import { PageHeading, Pagination, SortLinks } from "@/components/listing-controls";
+import { ProductGrid, ProductGridSkeleton } from "@/components/product-card";
+import { getProductPage, isShopifyConfigured } from "@/lib/shopify";
+import { getSort, SORT_OPTIONS } from "@/lib/shopify/sort";
+import { param } from "@/lib/search-params";
 
 export const metadata: Metadata = {
-  title: "Products",
-  description: "Products from the Shopify Storefront API",
+  title: "Shop all",
+  description: "Shop every piece from Twisted Reality E.N.T.",
+  alternates: { canonical: "/products" },
 };
 
-async function ProductList() {
+async function Listing({ searchParams }: { searchParams: PageProps<"/products">["searchParams"] }) {
+  const sp = await searchParams;
+  const sort = getSort(param(sp, "sort"));
+  const after = param(sp, "after");
+  const before = param(sp, "before");
   if (!isShopifyConfigured()) return <NotConfigured />;
-
-  let products: ProductCard[];
+  let page;
   try {
-    products = await getProducts(50); // cached for an hour (see lib/shopify/products.ts)
+    page = await getProductPage({ sort: sort.slug, after, before });
   } catch (err) {
-    return (
-      <ErrorBox
-        title="Couldn't load products."
-        message={err instanceof Error ? err.message : "Unknown error"}
-      />
-    );
+    console.error("[products]", err);
+    return <ErrorBox title="Couldn't load products." message="Please try again in a moment." />;
   }
-
-  if (products.length === 0) {
-    return <p className="text-zinc-600 dark:text-zinc-400">No products found.</p>;
-  }
-
+  const keep = { sort: sort.slug === "featured" ? undefined : sort.slug };
   return (
-    <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {products.map((p) => {
-        const { minVariantPrice, maxVariantPrice } = p.priceRange;
-        const hasRange = minVariantPrice.amount !== maxVariantPrice.amount;
-        return (
-          <li
-            key={p.id}
-            data-testid="product-card"
-            className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800"
-          >
-            <Link href={`/products/${p.handle}`} className="block">
-              {p.featuredImage ? (
-                <Image
-                  data={p.featuredImage}
-                  alt={p.featuredImage.altText ?? p.title}
-                  aspectRatio="1/1"
-                  sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                  className="aspect-square w-full object-cover"
-                />
-              ) : (
-                <div className="aspect-square w-full bg-zinc-100 dark:bg-zinc-900" />
-              )}
-              <div className="p-4">
-                <h2 className="font-medium">{p.title}</h2>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {hasRange ? "From " : null}
-                  <Money data={minVariantPrice} as="span" />
-                  {p.availableForSale ? null : " · Sold out"}
-                </p>
-              </div>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <div className="mb-6">
+        <SortLinks basePath="/products" current={sort} options={SORT_OPTIONS.filter((o) => o.slug !== "featured")} />
+      </div>
+      {page.nodes.length ? (
+        <ProductGrid products={page.nodes} priorityCount={4} />
+      ) : (
+        <p className="text-muted">No products found.</p>
+      )}
+      <Pagination basePath="/products" pageInfo={page.pageInfo} params={keep} />
+    </>
   );
 }
 
-export default function ProductsPage() {
+export default function ProductsPage({ searchParams }: PageProps<"/products">) {
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-12">
-      <h1 className="mb-8 text-3xl font-semibold tracking-tight">Products</h1>
-      <Suspense fallback={<p className="text-zinc-500">Loading products…</p>}>
-        <ProductList />
+    <main className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6">
+      <PageHeading title="Shop all" eyebrow="Catalog" />
+      <Suspense fallback={<ProductGridSkeleton />}>
+        <Listing searchParams={searchParams} />
       </Suspense>
     </main>
   );

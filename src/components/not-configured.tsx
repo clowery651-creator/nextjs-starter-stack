@@ -1,21 +1,20 @@
 export function NotConfigured() {
   return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+    <div className="border border-glitch/50 bg-glitch/10 p-4 text-fg">
       <p className="font-medium">Shopify isn&apos;t connected yet.</p>
-      <p className="mt-1 text-sm">
-        Copy <code>.env.example</code> to <code>.env.local</code> and set{" "}
-        <code>SHOPIFY_STORE_DOMAIN</code> and{" "}
-        <code>SHOPIFY_STOREFRONT_ACCESS_TOKEN</code>.
+      <p className="mt-1 text-sm text-muted">
+        Set <code>SHOPIFY_STORE_DOMAIN</code> and <code>SHOPIFY_STOREFRONT_ACCESS_TOKEN</code> (see{" "}
+        <code>.env.example</code>), then redeploy.
       </p>
     </div>
   );
 }
 
-export function ErrorBox({ title, message }: { title: string; message: string }) {
+export function ErrorBox({ title, message }: { title: string; message?: string }) {
   return (
-    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100">
+    <div role="alert" className="border border-danger/50 bg-danger/10 p-4">
       <p className="font-medium">{title}</p>
-      <p className="mt-1 text-sm">{message}</p>
+      {message ? <p className="mt-1 text-sm text-muted">{message}</p> : null}
     </div>
   );
 }
