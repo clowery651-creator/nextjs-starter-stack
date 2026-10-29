@@ -64,6 +64,15 @@ const CART_LINES_REMOVE = /* GraphQL */ `
   ${CART_FRAGMENT}
 `;
 
+const CART_BUYER_IDENTITY_UPDATE = /* GraphQL */ `
+  mutation CartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+    cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
+      cart { id }
+      userErrors { field message }
+    }
+  }
+`;
+
 export async function getCartId(): Promise<string | undefined> {
   return (await cookies()).get(CART_COOKIE)?.value;
 }
@@ -93,10 +102,12 @@ export async function getCart(): Promise<Cart | null> {
 
 export async function createCart(
   lines: { merchandiseId: string; quantity: number }[] = [],
+  customerAccessToken?: string | null,
 ): Promise<Cart> {
+  const input = customerAccessToken ? { lines, buyerIdentity: { customerAccessToken } } : { lines };
   const data = await storefrontFetch<{ cartCreate: CartPayload }>({
     query: CART_CREATE,
-    variables: { input: { lines } },
+    variables: { input },
   });
   const cart = unwrap(data.cartCreate);
   await setCartId(cart.id);
@@ -105,10 +116,11 @@ export async function createCart(
 
 export async function addCartLines(
   lines: { merchandiseId: string; quantity: number }[],
+  customerAccessToken?: string | null,
 ): Promise<Cart> {
   const cartId = await getCartId();
   // No cart yet, or the old one expired: start a new one with these lines.
-  if (!cartId || !(await getCart())) return createCart(lines);
+  if (!cartId || !(await getCart())) return createCart(lines, customerAccessToken);
   const data = await storefrontFetch<{ cartLinesAdd: CartPayload }>({
     query: CART_LINES_ADD,
     variables: { cartId, lines },
@@ -134,4 +146,20 @@ export async function removeCartLines(lineIds: string[]): Promise<Cart> {
     variables: { cartId, lineIds },
   });
   return unwrap(data.cartLinesRemove);
+}
+
+/**
+ * Associates a cart with a signed-in customer so checkout is prefilled.
+ * The Storefront API's CartBuyerIdentityInput.customerAccessToken accepts
+ * Customer Account API access tokens (this is what Hydrogen's cart handler
+ * does). Callers treat failures as non-fatal.
+ */
+export async function linkCartToCustomer(cartId: string, customerAccessToken: string): Promise<void> {
+  const data = await storefrontFetch<{ cartBuyerIdentityUpdate: { userErrors: UserError[] } }>({
+    query: CART_BUYER_IDENTITY_UPDATE,
+    variables: { cartId, buyerIdentity: { customerAccessToken } },
+    cache: "no-store",
+  });
+  const errors = data.cartBuyerIdentityUpdate.userErrors;
+  if (errors.length) throw new Error(errors.map((e) => e.message).join("; "));
 }

@@ -26,6 +26,7 @@ export {
   createCart,
   getCart,
   getCartId,
+  linkCartToCustomer,
   removeCartLines,
   updateCartLines,
 } from "./cart";

@@ -1,6 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { getCustomerAccessToken } from "@/lib/customer-account";
 import {
   addCartLines,
   isShopifyConfigured,
@@ -29,7 +30,9 @@ export async function addToCartAction(
   }
   const qty = Math.min(MAX_QTY, Math.max(1, Math.floor(quantity) || 1));
   try {
-    const cart = await addCartLines([{ merchandiseId, quantity: qty }]);
+    // Signed-in customers get new carts linked to them (prefilled checkout).
+    const customerToken = await getCustomerAccessToken().catch(() => null);
+    const cart = await addCartLines([{ merchandiseId, quantity: qty }], customerToken);
     refresh();
     return { ok: true, cart };
   } catch (err) {
