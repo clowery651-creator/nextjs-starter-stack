@@ -1,100 +1,69 @@
 import type { Metadata } from "next";
-import { cacheLife } from "next/cache";
+import Link from "next/link";
 import { Suspense } from "react";
-import {
-  formatMoney,
-  getProducts,
-  isShopifyConfigured,
-  type Product,
-} from "@/lib/shopify";
+import { Image, Money } from "@/components/hydrogen";
+import { ErrorBox, NotConfigured } from "@/components/not-configured";
+import { getProducts, isShopifyConfigured, type ProductCard } from "@/lib/shopify";
 
 export const metadata: Metadata = {
   title: "Products",
   description: "Products from the Shopify Storefront API",
 };
 
-type ProductsResult =
-  | { status: "ok"; products: Product[] }
-  | { status: "not-configured" }
-  | { status: "error"; message: string };
-
-async function loadProducts(): Promise<ProductsResult> {
-  "use cache";
-  cacheLife("hours");
-  if (!isShopifyConfigured()) return { status: "not-configured" };
-  try {
-    return { status: "ok", products: await getProducts(24) };
-  } catch (err) {
-    return {
-      status: "error",
-      message: err instanceof Error ? err.message : "Unknown error",
-    };
-  }
-}
-
 async function ProductList() {
-  const result = await loadProducts();
+  if (!isShopifyConfigured()) return <NotConfigured />;
 
-  if (result.status === "not-configured") {
+  let products: ProductCard[];
+  try {
+    products = await getProducts(50); // cached for an hour (see lib/shopify/products.ts)
+  } catch (err) {
     return (
-      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
-        <p className="font-medium">Shopify isn&apos;t connected yet.</p>
-        <p className="mt-1 text-sm">
-          Copy <code>.env.example</code> to <code>.env.local</code> and set{" "}
-          <code>SHOPIFY_STORE_DOMAIN</code> and{" "}
-          <code>SHOPIFY_STOREFRONT_ACCESS_TOKEN</code>.
-        </p>
-      </div>
+      <ErrorBox
+        title="Couldn't load products."
+        message={err instanceof Error ? err.message : "Unknown error"}
+      />
     );
   }
 
-  if (result.status === "error") {
-    return (
-      <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100">
-        <p className="font-medium">Couldn&apos;t load products.</p>
-        <p className="mt-1 text-sm">{result.message}</p>
-      </div>
-    );
-  }
-
-  if (result.products.length === 0) {
+  if (products.length === 0) {
     return <p className="text-zinc-600 dark:text-zinc-400">No products found.</p>;
   }
 
   return (
     <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {result.products.map((p) => (
-        <li
-          key={p.id}
-          className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800"
-        >
-          {p.featuredImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={p.featuredImage.url}
-              alt={p.featuredImage.altText ?? p.title}
-              className="aspect-square w-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="aspect-square w-full bg-zinc-100 dark:bg-zinc-900" />
-          )}
-          <div className="p-4">
-            <h2 className="font-medium">{p.title}</h2>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              {formatMoney(p.priceRange.minVariantPrice)}
-            </p>
-            {p.onlineStoreUrl ? (
-              <a
-                href={p.onlineStoreUrl}
-                className="mt-2 inline-block text-sm font-medium underline"
-              >
-                View in store
-              </a>
-            ) : null}
-          </div>
-        </li>
-      ))}
+      {products.map((p) => {
+        const { minVariantPrice, maxVariantPrice } = p.priceRange;
+        const hasRange = minVariantPrice.amount !== maxVariantPrice.amount;
+        return (
+          <li
+            key={p.id}
+            data-testid="product-card"
+            className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800"
+          >
+            <Link href={`/products/${p.handle}`} className="block">
+              {p.featuredImage ? (
+                <Image
+                  data={p.featuredImage}
+                  alt={p.featuredImage.altText ?? p.title}
+                  aspectRatio="1/1"
+                  sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                  className="aspect-square w-full object-cover"
+                />
+              ) : (
+                <div className="aspect-square w-full bg-zinc-100 dark:bg-zinc-900" />
+              )}
+              <div className="p-4">
+                <h2 className="font-medium">{p.title}</h2>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  {hasRange ? "From " : null}
+                  <Money data={minVariantPrice} as="span" />
+                  {p.availableForSale ? null : " · Sold out"}
+                </p>
+              </div>
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }
