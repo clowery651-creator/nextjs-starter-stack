@@ -2,19 +2,44 @@ export const IMAGE_FRAGMENT = /* GraphQL */ `
   fragment ImageFields on Image { id url altText width height }
 `;
 
+export const PAGE_INFO_FRAGMENT = /* GraphQL */ `
+  fragment PageInfoFields on PageInfo {
+    hasNextPage
+    hasPreviousPage
+    startCursor
+    endCursor
+  }
+`;
+
 export const PRODUCT_CARD_FRAGMENT = /* GraphQL */ `
   fragment ProductCardFields on Product {
     id
     handle
     title
+    vendor
     availableForSale
     featuredImage { ...ImageFields }
     priceRange {
       minVariantPrice { amount currencyCode }
       maxVariantPrice { amount currencyCode }
     }
+    compareAtPriceRange {
+      maxVariantPrice { amount currencyCode }
+    }
   }
   ${IMAGE_FRAGMENT}
+`;
+
+export const COLLECTION_FRAGMENT = /* GraphQL */ `
+  fragment CollectionFields on Collection {
+    id
+    handle
+    title
+    description
+    updatedAt
+    seo { title description }
+    image { ...ImageFields }
+  }
 `;
 
 export const CART_FRAGMENT = /* GraphQL */ `
@@ -40,7 +65,7 @@ export const CART_FRAGMENT = /* GraphQL */ `
             title
             image { ...ImageFields }
             selectedOptions { name value }
-            product { handle title }
+            product { id handle title vendor }
           }
         }
       }

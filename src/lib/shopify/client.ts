@@ -59,13 +59,14 @@ type GraphQLResponse<T> = {
 
 /**
  * Server-only Storefront API GraphQL request.
- * `cache` defaults to "no-store"; product reads are cached one level up with
- * the "use cache" directive (see products.ts).
+ * Catalog reads are cached one level up with the "use cache" directive
+ * (see products.ts / collections.ts); pass `cache: "no-store"` for
+ * per-visitor data such as the cart.
  */
 export async function storefrontFetch<TData, TVariables = Record<string, unknown>>({
   query,
   variables,
-  cache = "no-store",
+  cache,
 }: {
   query: string;
   variables?: TVariables;
@@ -78,7 +79,7 @@ export async function storefrontFetch<TData, TVariables = Record<string, unknown
     method: "POST",
     headers: client.getPublicTokenHeaders({ contentType: "json" }),
     body: JSON.stringify({ query, variables }),
-    cache,
+    ...(cache ? { cache } : {}),
   });
 
   if (!res.ok) {
