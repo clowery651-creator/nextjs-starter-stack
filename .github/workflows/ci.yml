@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Lint, typecheck, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Placeholders only. The app must build without real Shopify credentials:
+      # Shopify pages render a "not connected" notice when these are empty.
+      SHOPIFY_STORE_DOMAIN: ""
+      SHOPIFY_STOREFRONT_ACCESS_TOKEN: ""
+      SHOPIFY_STOREFRONT_API_VERSION: "2026-04"
+      SHOPIFY_REVALIDATION_SECRET: "ci-placeholder"
+      NEXT_PUBLIC_SITE_URL: "https://example.com"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
