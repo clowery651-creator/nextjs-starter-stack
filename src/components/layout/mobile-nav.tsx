@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { NavItem } from "@/lib/shopify/types";
 
-export function MobileNav({ items }: { items: NavItem[] }) {
+export function MobileNav({ items, account }: { items: NavItem[]; account?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const [lastPath, setLastPath] = useState(pathname);
@@ -31,7 +31,6 @@ export function MobileNav({ items }: { items: NavItem[] }) {
   const links = [
     ...items,
     { title: "Search", href: "/search", external: false },
-    { title: "Account", href: "/account", external: false },
   ];
 
   return (
@@ -101,6 +100,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
                     </li>
                   ))}
                 </ul>
+                {account ? <div className="mt-6 border-t border-line pt-4">{account}</div> : null}
               </nav>
             </div>,
             document.body,

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { UserIcon } from "@/components/account/account-menu";
+import { HeaderAccount, HeaderMobileAccount } from "@/components/account/header-account";
 import { CartButton } from "@/components/cart/cart-button";
 import { Logo } from "@/components/logo";
 import { getNavItems } from "./nav";
@@ -17,7 +19,20 @@ export async function Header() {
         Skip to content
       </a>
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-4 px-4 sm:px-6">
-        <MobileNav items={items} />
+        <MobileNav
+          items={items}
+          account={
+            <Suspense
+              fallback={
+                <Link href="/account" className="block py-3 font-display text-2xl uppercase">
+                  Account
+                </Link>
+              }
+            >
+              <HeaderMobileAccount />
+            </Suspense>
+          }
+        />
         <Logo />
         <nav aria-label="Main" className="ml-6 hidden lg:block">
           <ul className="flex items-center gap-6 text-sm font-medium uppercase tracking-wider">
@@ -49,13 +64,21 @@ export async function Header() {
           >
             <SearchIcon />
           </Link>
-          <Link
-            href="/account"
-            aria-label="Account"
-            className="hidden h-9 w-9 place-items-center border border-line hover:border-glitch sm:grid"
-          >
-            <UserIcon />
-          </Link>
+          <div className="hidden sm:block">
+            <Suspense
+              fallback={
+                <Link
+                  href="/account"
+                  aria-label="Account"
+                  className="grid h-9 w-9 place-items-center border border-line hover:border-glitch"
+                >
+                  <UserIcon />
+                </Link>
+              }
+            >
+              <HeaderAccount />
+            </Suspense>
+          </div>
           <CartButton />
         </div>
       </div>
@@ -68,15 +91,6 @@ export function SearchIcon() {
     <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
-    </svg>
-  );
-}
-
-function UserIcon() {
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
     </svg>
   );
 }

@@ -13,6 +13,9 @@ export const SITE_DESCRIPTION =
 export const SHOP_URL = "https://shop.twistedrealityentertainment.com";
 /** Shopify customer accounts (new customer accounts, hosted by Shopify). */
 export const CUSTOMER_ACCOUNT_URL = "https://account.twistedrealityentertainment.com";
+/** Hosted order history and profile (used when in-app accounts aren't configured). */
+export const CUSTOMER_ACCOUNT_ORDERS_URL = `${CUSTOMER_ACCOUNT_URL}/orders`;
+export const CUSTOMER_ACCOUNT_PROFILE_URL = `${CUSTOMER_ACCOUNT_URL}/profile`;
 
 export const SOCIAL_LINKS: { label: string; href: string }[] = [
   { label: "Pinterest", href: "https://www.pinterest.com/twistedrealityent/" },
