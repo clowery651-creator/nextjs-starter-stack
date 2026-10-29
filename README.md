@@ -16,7 +16,7 @@ Production storefront for **Twisted Reality E.N.T.**: Next.js 16 (App Router, Ca
 | Analytics | Vercel Web Analytics + Speed Insights; Shopify analytics (`page_view`, `add_to_cart`) only after the visitor accepts the consent banner |
 | Resilience | `error.tsx`, `global-error.tsx`, `not-found.tsx` (missing products/collections/policies/pages return a real 404), `loading.tsx` skeletons |
 | Performance | Partial prerendering, `"use cache"` data with cache tags, `next/image` for `cdn.shopify.com` (AVIF/WebP), on-demand revalidation webhook, security headers |
-| Accounts | `/account` page that links to Shopify customer accounts at `account.twistedrealityentertainment.com` (no custom OAuth) |
+| Accounts | In-app sign-in with the Shopify **Customer Account API** (OAuth 2.0 + PKCE, public client): profile, recent orders, paginated order history and order detail pages, header account menu (desktop + mobile), cart linked to the signed-in customer. Without a client ID it falls back to a native-looking hand-off to `account.twistedrealityentertainment.com` |
 | CI | GitHub Actions: `npm ci`, lint, typecheck, build on every push to `main` and every PR |
 
 ## Stack
@@ -54,6 +54,10 @@ npm run dev                  # http://localhost:3000
 | `SHOPIFY_STOREFRONT_ACCESS_TOKEN` | Yes | *(public Storefront token)* | Shopify admin → Sales channels → **Headless** → storefront → Storefront API → **Public access token** |
 | `SHOPIFY_STOREFRONT_API_VERSION` | No | `2026-04` | Defaults to `2026-04`, the version Hydrogen React 2026.4.x is built for |
 | `NEXT_PUBLIC_SITE_URL` | Recommended | `https://www.example.com` | Canonical origin for metadata, OG tags, sitemap and robots. Falls back to `VERCEL_PROJECT_PRODUCTION_URL` (set automatically by Vercel), then `VERCEL_URL`, then `http://localhost:3000` |
+| `SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID` | For in-app accounts | `039bc1b2-…` | Headless → storefront → **Customer Account API** → Credentials. Public value. Unset = hosted accounts fallback. See [Accounts](#accounts) |
+| `SESSION_SECRET` | For in-app accounts | *(`openssl rand -base64 48`)* | At least 32 chars. Encrypts the session cookie. Rotating it signs everyone out |
+| `SHOPIFY_SHOP_ID` | No | `101438030190` | Only needed if discovery from `SHOPIFY_STORE_DOMAIN` fails |
+| `SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_SECRET` | No | | Only for a **Confidential** client type. Leave empty for the recommended Public client |
 | `SHOPIFY_REVALIDATION_SECRET` | For webhooks | *(Shopify webhook signing secret)* | Verifies Shopify webhooks on `POST /api/revalidate`. Without it the endpoint returns 500 and content still refreshes hourly |
 
 Never commit real tokens. `.env*` is git-ignored except `.env.example`. Only the **public** Storefront token is used; it is designed to be visible in browsers. Don't put the private Storefront token or an Admin API token in this app.
@@ -77,7 +81,15 @@ src/
       collections.ts     getCollections, getCollection (sorted + paginated products)
       search.ts          searchProducts, predictiveSearch
       shop.ts            shop info, policies, pages, getMenu("main-menu")
-      cart.ts            cart queries/mutations (cache: "no-store"), cart cookie
+      cart.ts            cart queries/mutations (cache: "no-store"), cart cookie, buyer identity
+    customer-account/
+      config.ts          env config (null = hosted fallback)
+      discovery.ts       .well-known discovery + env overrides + shop-id fallback
+      oauth.ts           PKCE, authorize URL, code/refresh exchange, id_token check, logout URL
+      session.ts         encrypted (JWE) cookie helpers
+      auth.ts            server-only session reads (Data Access Layer)
+      api.ts             Customer Account API GraphQL client + queries
+  proxy.ts               /account/*: token refresh, noindex + no-store headers
   app/
     layout.tsx           fonts, metadata defaults, header/footer, cart drawer, analytics
     page.tsx             home: hero, collections, latest drops, shop CTA
@@ -85,7 +97,8 @@ src/
     collections/…        collection index + collection pages
     search/page.tsx      search results
     cart/                cart page + Server Actions (add/update/remove)
-    account/page.tsx     customer accounts hand-off
+    account/             Customer Account API: login/authorize/logout route handlers,
+                         overview, orders, orders/[id] (all noindex, request-time)
     policies/[handle]/   Shopify policies (privacy, refund, shipping, terms)
     pages/[handle]/      Shopify online-store pages (e.g. /pages/contact)
     api/revalidate/      Shopify webhook → revalidateTag
@@ -93,6 +106,7 @@ src/
     sitemap.ts, robots.ts, opengraph-image.tsx, error.tsx, global-error.tsx, not-found.tsx
   components/
     layout/              header, mobile nav, search box, footer, nav data
+    account/             account menu (header + mobile), account UI, formatters
     cart/                cart context (useOptimistic), drawer, lines, button, cart view
     analytics/           consent banner + Shopify analytics events
     sections/            homepage/collection cards
@@ -134,9 +148,68 @@ curl -X POST "https://<your-site>/api/revalidate?topic=all" -H "x-revalidation-s
 - **Shopify analytics** (`page_view` on navigation, `add_to_cart` after a successful add) are sent with Hydrogen React's `sendShopifyAnalytics` **only after the visitor taps Accept** on the consent banner. Declining, or a browser sending **Global Privacy Control**, means nothing is sent. The choice is stored in `localStorage` (`tr-analytics-consent`).
 - `useShopifyCookies` runs with `fetchTrackingValues: false`. In Hydrogen React 2026.4, Shopify's backend (Customer Privacy API) owns the `_shopify_y` / `_shopify_s` tracking cookies, and refreshing them from the browser needs a same-origin Storefront API proxy (`/api/unstable/graphql.json`) that only exists on Shopify-hosted/Oxygen domains. On Vercel that request would just 404, so it's skipped: events are still delivered to Shopify (verified: `monorail-edge.shopifysvc.com` receives `page_view` and `add_to_cart` after Accept), but they carry client-side visit ids only, so Shopify's own reports will attribute headless sessions less completely than Online Store sessions. Vercel Analytics is the reliable traffic source here.
 
-## Customer accounts
+## Accounts
 
-`/account` links to Shopify's hosted customer accounts at `https://account.twistedrealityentertainment.com` (orders, addresses, profile). There's no custom OAuth in this app. To add in-app account pages later, use the Customer Account API with a confidential client registered under the Headless channel.
+Customers sign in on this site with Shopify's [Customer Account API](https://shopify.dev/docs/storefronts/headless/building-with-the-customer-account-api/getting-started), using OAuth 2.0 Authorization Code + PKCE as a **Public** client. Everything runs on the server. Tokens live only in an encrypted cookie, and the browser never sees them.
+
+### How it works
+
+| Route | What it does |
+| --- | --- |
+| `GET /account/login?return_to=/account/orders` | Creates `state`, `nonce` and a PKCE verifier, stores them in a 10-minute encrypted httpOnly cookie (path `/account`), and 302s to Shopify's authorize endpoint (`scope=openid email customer-account-api:full`, `code_challenge_method=S256`). `return_to` accepts only relative paths |
+| `GET /account/authorize` | Callback. Checks `state` (CSRF), exchanges the code with the verifier, verifies the `id_token` (JWKS signature, issuer, audience, nonce), loads the first name, links any existing cart to the customer, then sets the session cookie and redirects to `return_to` |
+| `POST /account/logout` | Clears the session and redirects to Shopify's `end_session_endpoint` with `id_token_hint` and `post_logout_redirect_uri` set to the site URL. `GET` works too, but only for same-origin navigations |
+| `/account` | Profile (name, email, phone, default address) and the 3 most recent orders |
+| `/account/orders` | Order history, 10 per page, cursor pagination |
+| `/account/orders/[id]` | Line items, totals, payment and fulfillment status, tracking links and the Shopify order status page |
+
+- **Endpoints** are discovered from `https://<SHOPIFY_STORE_DOMAIN>/.well-known/openid-configuration` and `/.well-known/customer-account-api`, then memoized for an hour. For this store they resolve to `https://account.twistedrealityentertainment.com/authentication/oauth/{authorize,token}`, `/authentication/logout` and `/customer/api/<version>/graphql`. You can override any of them with `SHOPIFY_CUSTOMER_ACCOUNT_AUTHORIZE_URL`, `_TOKEN_URL`, `_LOGOUT_URL`, `_GRAPHQL_URL`, or pin the API version with `SHOPIFY_CUSTOMER_ACCOUNT_API_VERSION` (by default it uses the version discovery returns). If discovery is down and `SHOPIFY_SHOP_ID` is set, it falls back to `https://shopify.com/authentication/<shop_id>/…`.
+- **Session.** `tr_customer_session` is a JWE (`dir` + `A256GCM`, key derived from `SESSION_SECRET`) that holds the access, refresh and id tokens, the expiry and the first name. The cookie is httpOnly, `Secure` in production, `SameSite=Lax` and lasts 30 days. `src/proxy.ts` runs on `/account/*` and refreshes the access token a minute before it expires, so Server Components only ever read cookies. A session that's unreadable or can't be refreshed is cleared, and the customer sees the sign-in panel.
+- **Security.** CSRF is covered by `state` on login and by `SameSite=Lax` plus a POST form on logout. The `id_token` nonce is checked. Account pages send `noindex` (both the meta tag and `X-Robots-Tag`) and `Cache-Control: private, no-store`, and render at request time behind `<Suspense>` with every Customer Account API call set to `cache: "no-store"`. Route handlers call `connection()`, so they're never prerendered.
+- **Header.** The header shows **Sign in**, or the customer's first name with a menu (Account, Orders, Sign out). The mobile drawer has the same entries. The static shell shows a plain account icon until the session streams in.
+- **Cart.** On sign-in, an existing cart gets `cartBuyerIdentityUpdate` with `buyerIdentity.customerAccessToken` set to the Customer Account API access token. New carts created while signed in get the same token in `cartCreate`. That's the same thing Hydrogen's cart handler does, and it prefills checkout. Failures are ignored, because the cart still works without it.
+- **Fallback.** If `SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID` or `SESSION_SECRET` is missing, `/account` shows a branded page whose **Sign in**, **Create account**, **Order history** and **Profile** links go to `https://account.twistedrealityentertainment.com` (`/orders`, `/profile`). `/account/login` redirects there too. Nothing crashes, and CI builds this way.
+
+### Shopify admin setup (one time)
+
+Do this once the production URL (for example `https://<project>.vercel.app` or your custom domain) is known. Below, `<site>` means that origin, with `https://` and no trailing slash.
+
+1. **Settings → Customer accounts**: make sure **Customer accounts** (the new, passwordless kind) is selected. This store already uses them at `account.twistedrealityentertainment.com`.
+2. **Sales channels → Headless → Next.js Starter Stack → Customer Account API**.
+3. Under **Application setup**:
+   - **Client type**: **Public**. Click **Edit** and save if it isn't already.
+   - **Callback URI(s)**: `https://<site>/account/authorize`
+   - **JavaScript origin(s)**: `https://<site>`
+   - **Logout URI(s)**: `https://<site>`
+   - Add each preview or custom domain you want sign-in to work on as its own set of three entries. Shopify accepts only HTTPS URLs, never `localhost`.
+4. Under **Permissions**, keep the customer and order read permissions on (the defaults).
+5. Under **Credentials**, copy the **Client ID**. A Public client has no secret.
+6. **Shop ID** (optional): it's the number in the discovery `issuer`, e.g. `https://shopify.com/authentication/101438030190` → `101438030190`. You only need it if discovery fails. You can see it with `curl -s https://twistedrealityent.myshopify.com/.well-known/openid-configuration`.
+
+### Vercel environment variables
+
+Go to Project → **Settings → Environment Variables** and add these for Production (and Preview, if those URLs are registered in step 3):
+
+| Name | Value |
+| --- | --- |
+| `SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID` | the Client ID from step 5 |
+| `SESSION_SECRET` | output of `openssl rand -base64 48`. Generate it once, and keep it secret |
+| `NEXT_PUBLIC_SITE_URL` | `https://<site>`, exactly the origin registered in step 3. The redirect URI is `${NEXT_PUBLIC_SITE_URL}/account/authorize` |
+
+Then **redeploy**. `NEXT_PUBLIC_*` values and the header's hosted or in-app mode are fixed at build time.
+
+### Local development
+
+Shopify only redirects to HTTPS callbacks, so `http://localhost` can't finish a sign-in. Use a tunnel:
+
+```bash
+npm run build && npm start                    # or npm run dev
+ngrok http 3000                               # or: cloudflared tunnel --url http://localhost:3000
+# .env.local
+NEXT_PUBLIC_SITE_URL=https://<your-tunnel-host>
+```
+
+Then add `https://<your-tunnel-host>/account/authorize`, `https://<your-tunnel-host>` (JavaScript origin) and `https://<your-tunnel-host>` (Logout) in the Application setup, and open the site through the tunnel URL. Remove those entries when you're done. Without the tunnel you can still check the flow: `/account/login` should 302 to Shopify with `code_challenge`, `state` and `redirect_uri`, and Shopify then answers `redirect_uri mismatch` until the URI is registered.
 
 ## CI
 

@@ -24,6 +24,9 @@ jobs:
       SHOPIFY_STOREFRONT_ACCESS_TOKEN: ""
       SHOPIFY_STOREFRONT_API_VERSION: "2026-04"
       SHOPIFY_REVALIDATION_SECRET: "ci-placeholder"
+      # Empty = hosted-accounts fallback; the build must not need account credentials.
+      SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID: ""
+      SESSION_SECRET: ""
       NEXT_PUBLIC_SITE_URL: "https://example.com"
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
