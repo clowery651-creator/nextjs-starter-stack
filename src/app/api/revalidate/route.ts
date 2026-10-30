@@ -6,11 +6,11 @@ import { TAGS } from "@/lib/shopify/tags";
 /**
  * POST /api/revalidate — on-demand cache invalidation for Shopify webhooks.
  *
- * Auth (either):
+ * Auth (either one passes):
  *  - Shopify webhook HMAC: `X-Shopify-Hmac-Sha256` verified with
- *    SHOPIFY_REVALIDATION_SECRET (the webhook signing secret), or
+ *    SHOPIFY_REVALIDATION_SECRET (admin-created webhooks' signing secret), or
  *  - `?secret=<SHOPIFY_REVALIDATION_SECRET>` / `x-revalidation-secret` header
- *    (manual calls, other services).
+ *    (Admin API webhook subscriptions, manual calls, other services).
  *
  * Topic comes from `X-Shopify-Topic` (products/*, collections/*, …) or `?topic=`.
  */
@@ -54,13 +54,12 @@ export async function POST(request: NextRequest) {
   const hmac = request.headers.get("x-shopify-hmac-sha256");
   const provided = request.nextUrl.searchParams.get("secret") ?? request.headers.get("x-revalidation-secret");
 
-  let authorized = false;
-  if (hmac) {
-    const digest = createHmac("sha256", secret).update(raw, "utf8").digest("base64");
-    authorized = safeEqual(digest, hmac);
-  } else if (provided) {
-    authorized = safeEqual(provided, secret);
-  }
+  // Either check is sufficient. Webhooks created through the Admin API are
+  // signed with that app's client secret (not ours), so their HMAC won't match;
+  // those subscriptions carry `?secret=` in the callback URL instead.
+  const hmacOk = hmac ? safeEqual(createHmac("sha256", secret).update(raw, "utf8").digest("base64"), hmac) : false;
+  const secretOk = provided ? safeEqual(provided, secret) : false;
+  const authorized = hmacOk || secretOk;
   if (!authorized) {
     return Response.json({ revalidated: false, message: "Unauthorized" }, { status: 401 });
   }

@@ -58,7 +58,7 @@ npm run dev                  # http://localhost:3000
 | `SESSION_SECRET` | For in-app accounts | *(`openssl rand -base64 48`)* | At least 32 chars. Encrypts the session cookie. Rotating it signs everyone out |
 | `SHOPIFY_SHOP_ID` | No | `101438030190` | Only needed if discovery from `SHOPIFY_STORE_DOMAIN` fails |
 | `SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_SECRET` | No | | Only for a **Confidential** client type. Leave empty for the recommended Public client |
-| `SHOPIFY_REVALIDATION_SECRET` | For webhooks | *(Shopify webhook signing secret)* | Verifies Shopify webhooks on `POST /api/revalidate`. Without it the endpoint returns 500 and content still refreshes hourly |
+| `SHOPIFY_REVALIDATION_SECRET` | For webhooks | *(random hex, or Shopify webhook signing secret)* | Authorizes `POST /api/revalidate` (HMAC or `?secret=`). Without it the endpoint returns 500 and content still refreshes hourly |
 
 Never commit real tokens. `.env*` is git-ignored except `.env.example`. Only the **public** Storefront token is used; it is designed to be visible in browsers. Don't put the private Storefront token or an Admin API token in this app.
 
@@ -123,7 +123,11 @@ How the pieces fit:
 
 ## On-demand revalidation (Shopify webhooks)
 
-`POST /api/revalidate` expires cache tags as soon as something changes in Shopify.
+`POST /api/revalidate` expires cache tags as soon as something changes in Shopify. A request is authorized if **either** the `X-Shopify-Hmac-Sha256` signature verifies with `SHOPIFY_REVALIDATION_SECRET` **or** `?secret=` / `x-revalidation-secret` equals it.
+
+**Option A — Admin API subscriptions (used by this store).** Generate a random secret (`openssl rand -hex 32`), set it as `SHOPIFY_REVALIDATION_SECRET` on Vercel (Production, Preview, Development) and redeploy. Then create one `webhookSubscriptionCreate` HTTP subscription (format `JSON`) per topic — `PRODUCTS_CREATE`, `PRODUCTS_UPDATE`, `PRODUCTS_DELETE`, `COLLECTIONS_CREATE`, `COLLECTIONS_UPDATE`, `COLLECTIONS_DELETE` — with callback URL `https://<your-site>/api/revalidate?secret=<secret>`. These deliveries are signed with the creating app's client secret, so the URL secret is what authorizes them. Treat the URL as a credential; rotate by changing the env var and re-creating the subscriptions.
+
+**Option B — Shopify admin webhooks.**
 
 1. Shopify admin → **Settings → Notifications → Webhooks** → **Create webhook**.
 2. Create one webhook per event, format **JSON**, URL `https://<your-site>/api/revalidate`, latest API version:
@@ -132,7 +136,7 @@ How the pieces fit:
    - (optional) Inventory level update
 3. Copy the signing secret shown at the bottom of the Webhooks page ("Your webhooks will be signed with …") into `SHOPIFY_REVALIDATION_SECRET` on Vercel, then redeploy.
 
-The route verifies `X-Shopify-Hmac-Sha256` against that secret, maps `X-Shopify-Topic` to tags (`products/*` → `products` + `product:<handle>`, `collections/*` → `collections` + `collection:<handle>` + `products`), and calls `revalidateTag(tag, { expire: 0 })`. Unknown topics get a 200 so Shopify doesn't retry.
+The route maps `X-Shopify-Topic` to tags (`products/*` → `products` + `product:<handle>`, `collections/*` → `collections` + `collection:<handle>` + `products`) and calls `revalidateTag(tag, { expire: 0 })`. Unknown topics get a 200 so Shopify doesn't retry.
 
 Manual refresh (e.g. after editing a menu or policy):
 
