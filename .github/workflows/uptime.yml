@@ -1,0 +1,63 @@
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check sites
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      UA: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36 TR-Uptime"
+      URLS: >-
+        https://shop.twistedrealityentertainment.com
+        https://twistedrealityentertainment.com
+        https://nextjs-starter-stack.vercel.app
+        https://nextjs-starter-stack.vercel.app/products
+    steps:
+      - name: Probe URLs
+        id: probe
+        run: |
+          failed=""
+          for url in $URLS; do
+            code=000
+            for attempt in 1 2; do
+              code=$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 30 \
+                -A "$UA" -H 'Accept: text/html' "$url" || echo 000)
+              if [[ "$code" =~ ^[23] ]]; then break; fi
+              [ "$attempt" = 1 ] && sleep 20
+            done
+            echo "$url -> $code"
+            if ! [[ "$code" =~ ^[23] ]]; then failed+="$url ($code)"$'\n'; fi
+          done
+          if [ -n "$failed" ]; then
+            { echo "failed<<EOF"; printf '%s' "$failed"; echo "EOF"; } >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Alert via ntfy
+        if: failure() && steps.probe.outputs.failed != ''
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          FAILED: ${{ steps.probe.outputs.failed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -n "$NTFY_TOPIC" ] || { echo "NTFY_TOPIC secret not set"; exit 0; }
+          curl -sS --max-time 15 \
+            -H "Title: Site down: Twisted Reality" \
+            -H "Priority: high" \
+            -H "Tags: rotating_light" \
+            -H "Click: $RUN_URL" \
+            -d "Uptime check failed:
+          $FAILED" \
+            "https://ntfy.sh/$NTFY_TOPIC"

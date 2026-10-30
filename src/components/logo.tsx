@@ -5,7 +5,7 @@ import { SITE_NAME } from "@/lib/site";
 export function Logo({ className = "" }: { className?: string }) {
   return (
     <Link href="/" className={`group flex items-center gap-2 ${className}`} aria-label={`${SITE_NAME} home`}>
-      <Image src="/brand/mark.png" alt="" width={36} height={36} priority className="h-9 w-9" />
+      <Image src="/brand/mark.png" alt="" width={36} height={36} loading="eager" className="h-9 w-9" />
       <span className="font-display text-lg leading-none uppercase tracking-wide sm:text-xl">
         <span className="glitch" data-text="Twisted Reality">
           Twisted Reality

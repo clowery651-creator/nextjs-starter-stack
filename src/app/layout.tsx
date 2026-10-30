@@ -32,7 +32,19 @@ export const metadata: Metadata = {
   },
   twitter: { card: "summary_large_image", title: SITE_NAME, description: SITE_DESCRIPTION },
   robots: { index: true, follow: true },
+  // Search console ownership tokens; set in Vercel env, no code change needed.
+  verification: siteVerification(),
 };
+
+function siteVerification(): Metadata["verification"] {
+  const google = process.env.GOOGLE_SITE_VERIFICATION?.trim();
+  const bing = process.env.BING_SITE_VERIFICATION?.trim();
+  if (!google && !bing) return undefined;
+  return {
+    ...(google ? { google } : {}),
+    ...(bing ? { other: { "msvalidate.01": bing } } : {}),
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#07060a",

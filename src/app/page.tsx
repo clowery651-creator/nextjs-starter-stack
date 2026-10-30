@@ -110,7 +110,9 @@ export default function Home() {
               alt="Twisted Reality glitch mark"
               width={384}
               height={384}
-              priority
+              sizes="(min-width: 768px) 384px, 90vw"
+              loading="eager"
+              fetchPriority="high"
               className="h-auto w-full drop-shadow-[0_0_60px_rgb(124_58_237/0.45)]"
             />
           </div>
