@@ -1,12 +1,22 @@
 import type { NextConfig } from "next";
 
+// Cloudflare Workers build (OpenNext): no Vercel image optimizer, so use a
+// free loader (Shopify CDN resizing). Vercel builds are unchanged.
+const isCloudflare = process.env.NEXT_PUBLIC_DEPLOY_TARGET?.trim() === "cloudflare";
+
 const nextConfig: NextConfig = {
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Cache Components / PPR on Vercel. The OpenNext Cloudflare adapter can't yet
+  // resume PPR shells reliably (blank pages, React #419/#441; see
+  // opennextjs/opennextjs-cloudflare#1115, #1349, #1369), so the Workers build
+  // renders dynamically and keeps "use cache" data caching via experimental.useCache.
+  cacheComponents: !isCloudflare,
+  partialPrefetching: !isCloudflare,
+  ...(isCloudflare ? { experimental: { useCache: true } } : {}),
   images: {
     // Shopify product, collection and file images.
     remotePatterns: [{ protocol: "https", hostname: "cdn.shopify.com", pathname: "/**" }],
     formats: ["image/avif", "image/webp"],
+    ...(isCloudflare ? { loader: "custom" as const, loaderFile: "./src/lib/image-loader.ts" } : {}),
   },
   poweredByHeader: false,
   async headers() {
@@ -40,3 +50,9 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+// Lets `next dev` use local Cloudflare bindings (getCloudflareContext). Only
+// when explicitly opted in, so Vercel/CI builds never load wrangler.
+if (process.env.NEXT_PUBLIC_DEPLOY_TARGET?.trim() === "cloudflare" && process.env.NODE_ENV === "development") {
+  void import("@opennextjs/cloudflare").then((m) => m.initOpenNextCloudflareForDev());
+}

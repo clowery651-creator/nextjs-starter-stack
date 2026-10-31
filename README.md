@@ -240,3 +240,40 @@ For Next.js on Vercel, Shopify's supported route is **`@shopify/hydrogen-react`*
 4. Deploy. If you change env vars later, go to **Deployments → ⋯ → Redeploy**.
 5. Every push to `main` deploys to production, and pull requests get preview URLs.
 6. Set up the Shopify webhooks (see **On-demand revalidation**) pointing at the production URL.
+
+## Deploy to Cloudflare Workers (free, optional)
+
+The same app also builds for Cloudflare Workers with the official
+[OpenNext Cloudflare adapter](https://opennext.js.org/cloudflare) (`@opennextjs/cloudflare`).
+Vercel is unaffected: every Cloudflare-only behavior is gated on
+`NEXT_PUBLIC_DEPLOY_TARGET=cloudflare`, which only the `build:cf` / `preview` / `deploy` scripts set.
+
+What differs on the Workers build:
+
+- **Cache Components / PPR are off** (the adapter can't resume PPR shells reliably yet;
+  see opennextjs/opennextjs-cloudflare#1115). Pages render dynamically; `"use cache"`
+  still works via `experimental.useCache`. `scripts/cf-build.mjs` temporarily comments out
+  the Cache Components-only `export const instant = false` lines during the build and
+  restores them afterwards.
+- **Images**: no Vercel optimizer, so `src/lib/image-loader.ts` asks Shopify's CDN to resize
+  (`?width=`), which serves AVIF/WebP for free.
+- **Vercel Analytics / Speed Insights** are not rendered (`src/lib/deploy-target.ts`).
+- **Caching** (Workers Free, no R2/card): KV incremental cache, Durable Object queue and
+  sharded Durable Object tag cache (`open-next.config.ts`, `wrangler.jsonc`), so
+  `/api/revalidate` (Shopify webhooks) keeps working.
+- Unknown product/collection handles return a streamed `200` + `noindex` instead of a hard `404`.
+
+Commands:
+
+```bash
+npm run build:cf      # OpenNext build -> .open-next/
+npm run preview       # build + run locally in workerd (put runtime vars in .dev.vars, gitignored)
+npm run deploy        # build + deploy (needs `wrangler login` or CLOUDFLARE_API_TOKEN)
+npm run cf-typegen    # generate cloudflare-env.d.ts binding types
+```
+
+Runtime env vars are the same as Vercel's (table above). Set them as Worker secrets
+(`wrangler secret bulk <file>`), never in `wrangler.jsonc`. `NEXT_PUBLIC_*` values are inlined at
+build time, so they must also be present in the shell that runs the build. Customer accounts need
+`<worker URL>/account/authorize` added to the Customer Account API callback URLs (and
+`NEXT_PUBLIC_SITE_URL` pointed at that URL) before login works on a Workers hostname.

@@ -1,5 +1,6 @@
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { isVercel } from "@/lib/deploy-target";
 import type { Metadata, Viewport } from "next";
 import { Anton, Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
@@ -100,10 +101,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <ShopifyAnalyticsLoader />
           </Suspense>
         </Providers>
-        <Suspense fallback={null}>
-          <Analytics />
-          <SpeedInsights />
-        </Suspense>
+        {/* Vercel-only: these beacons 404 off Vercel, so skip them on Cloudflare. */}
+        {isVercel ? (
+          <Suspense fallback={null}>
+            <Analytics />
+            <SpeedInsights />
+          </Suspense>
+        ) : null}
       </body>
     </html>
   );

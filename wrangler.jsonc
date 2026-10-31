@@ -1,0 +1,36 @@
+{
+  // Cloudflare Workers config for the OpenNext build (Workers Free plan).
+  // Vercel ignores this file. Secrets are NOT stored here: see README → Cloudflare.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "twistedreality-store",
+  "account_id": "6469517cf3d48f385c2d4deb4cb5c872",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": { "enabled": true },
+  // Self reference: required by the OpenNext revalidation queue.
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "twistedreality-store" }],
+  // Free-plan cache stack (no R2, so no card needed):
+  // KV incremental cache + Durable Object queue + Durable Object sharded tag cache.
+  // The KV id is filled in by /workspace/cf_deploy.sh (creates the namespace if missing).
+  "kv_namespaces": [{ "binding": "NEXT_INC_CACHE_KV", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" },
+      { "name": "NEXT_TAG_CACHE_DO_SHARDED", "class_name": "DOShardedTagCache" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler", "DOShardedTagCache"] }],
+  // Public, non-secret runtime vars. Store-specific values (domain, public
+  // Storefront token, etc.) are passed with --var at deploy time.
+  "vars": {
+    "NEXT_PUBLIC_DEPLOY_TARGET": "cloudflare",
+    "SHOPIFY_STOREFRONT_API_VERSION": "2026-04"
+  }
+}

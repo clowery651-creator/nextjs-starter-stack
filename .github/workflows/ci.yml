@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, cloudflare-workers]
   pull_request:
 
 concurrency:
@@ -39,3 +39,34 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
+
+  cloudflare:
+    name: Cloudflare Workers build (OpenNext)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SHOPIFY_STORE_DOMAIN: ""
+      SHOPIFY_STOREFRONT_ACCESS_TOKEN: ""
+      SHOPIFY_STOREFRONT_API_VERSION: "2026-04"
+      SHOPIFY_REVALIDATION_SECRET: "ci-placeholder"
+      SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID: ""
+      SESSION_SECRET: ""
+      NEXT_PUBLIC_SITE_URL: "https://example.com"
+      NEXT_TELEMETRY_DISABLED: "1"
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:cf
+      # Bundles the Worker without uploading (no Cloudflare auth needed).
+      # Workers Free allows 3 MiB gzipped.
+      - run: npx wrangler deploy --dry-run --outdir /tmp/cf-dry | tee /tmp/cf-dry.log
+      - name: Check Worker size (Free plan 3 MiB gzip)
+        run: |
+          kib=$(grep -oE 'gzip: [0-9.]+ KiB' /tmp/cf-dry.log | grep -oE '[0-9.]+' | tail -1)
+          echo "gzip KiB: $kib"
+          awk -v k="$kib" 'BEGIN { exit !(k < 3072) }'
