@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageHeading } from "@/components/listing-controls";
 import { NotConfigured } from "@/components/not-configured";
 import { getPage, isShopifyConfigured } from "@/lib/shopify";
+import { SITE_NAME } from "@/lib/site";
 
 /** Shopify Online Store pages (e.g. /pages/contact) rendered from the Storefront API. */
 /**
@@ -24,7 +25,9 @@ export async function generateMetadata({ params }: PageProps<"/pages/[handle]">)
     if (!page) return { title: "Not found" };
     return {
       title: page.seo.title || page.title,
-      description: (page.seo.description || page.bodySummary || "").slice(0, 160) || undefined,
+      description:
+        (page.seo.description || page.bodySummary || "").trim().slice(0, 160) ||
+        `${page.title} | ${SITE_NAME}: streetwear apparel, music and events. Questions, orders and collaborations.`,
       alternates: { canonical: `/pages/${handle}` },
     };
   } catch {
