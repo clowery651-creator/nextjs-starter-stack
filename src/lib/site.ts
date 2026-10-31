@@ -44,3 +44,16 @@ export function getSiteUrl(): string {
 export function absoluteUrl(path = "/"): string {
   return `${getSiteUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 }
+
+/**
+ * True only for the Cloudflare Workers test copy on *.workers.dev. Used to keep
+ * that copy out of search engines. Always false on Vercel.
+ */
+export function isWorkersDevTestCopy(): boolean {
+  if (process.env.NEXT_PUBLIC_DEPLOY_TARGET?.trim() !== "cloudflare") return false;
+  try {
+    return new URL(getSiteUrl()).hostname.endsWith(".workers.dev");
+  } catch {
+    return false;
+  }
+}

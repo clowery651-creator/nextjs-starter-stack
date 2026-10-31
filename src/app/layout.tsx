@@ -10,7 +10,7 @@ import { Footer } from "@/components/layout/footer";
 import { Header } from "@/components/layout/header";
 import { Providers } from "@/components/providers";
 import { getCart, getShopInfo, getShopifyConfig, type Cart } from "@/lib/shopify";
-import { SITE_DESCRIPTION, SITE_NAME, getSiteUrl } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, getSiteUrl, isWorkersDevTestCopy } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     locale: "en_US",
   },
   twitter: { card: "summary_large_image", title: SITE_NAME, description: SITE_DESCRIPTION },
-  robots: { index: true, follow: true },
+  robots: isWorkersDevTestCopy() ? { index: false, follow: false } : { index: true, follow: true },
   // Search console ownership tokens; set in Vercel env, no code change needed.
   verification: siteVerification(),
 };

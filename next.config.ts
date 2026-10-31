@@ -4,6 +4,17 @@ import type { NextConfig } from "next";
 // free loader (Shopify CDN resizing). Vercel builds are unchanged.
 const isCloudflare = process.env.NEXT_PUBLIC_DEPLOY_TARGET?.trim() === "cloudflare";
 
+// Cloudflare test copy on *.workers.dev: send X-Robots-Tag so it stays out of
+// search results. Never true on Vercel (requires the cloudflare target).
+const isWorkersDevTestCopy = (() => {
+  if (!isCloudflare) return false;
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SITE_URL?.trim() ?? "").hostname.endsWith(".workers.dev");
+  } catch {
+    return false;
+  }
+})();
+
 const nextConfig: NextConfig = {
   // Cache Components / PPR on Vercel. The OpenNext Cloudflare adapter can't yet
   // resume PPR shells reliably (blank pages, React #419/#441; see
@@ -35,6 +46,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; upgrade-insecure-requests",
           },
+          ...(isWorkersDevTestCopy ? [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] : []),
         ],
       },
     ];
