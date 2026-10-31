@@ -7,9 +7,20 @@ export const alt = SITE_NAME;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const markSrc = `data:image/png;base64,${await readFile(join(process.cwd(), "public/brand/mark.png"), "base64")}`;
+// Read lazily (not at module scope): metadata resolution imports this module on
+// every page, and on Cloudflare Workers there is no public/ dir on the runtime
+// filesystem, so a top-level read would break <head> metadata site-wide.
+// The image itself is prerendered at build time, where the file exists.
+async function loadMark(): Promise<string | null> {
+  try {
+    return `data:image/png;base64,${await readFile(join(process.cwd(), "public/brand/mark.png"), "base64")}`;
+  } catch {
+    return null;
+  }
+}
 
-export default function OpengraphImage() {
+export default async function OpengraphImage() {
+  const markSrc = await loadMark();
   return new ImageResponse(
     (
       <div
@@ -25,7 +36,7 @@ export default function OpengraphImage() {
         }}
       >
         {/* eslint-disable-next-line jsx-a11y/alt-text */}
-        <img src={markSrc} width={380} height={380} />
+        {markSrc ? <img src={markSrc} width={380} height={380} /> : null}
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ fontSize: 92, fontWeight: 800, lineHeight: 0.95, textTransform: "uppercase", display: "flex", flexDirection: "column" }}>
             <span>Twisted</span>

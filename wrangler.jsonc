@@ -19,7 +19,7 @@
   // Free-plan cache stack (no R2, so no card needed):
   // KV incremental cache + Durable Object queue + Durable Object sharded tag cache.
   // The KV id is filled in by /workspace/cf_deploy.sh (creates the namespace if missing).
-  "kv_namespaces": [{ "binding": "NEXT_INC_CACHE_KV", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }],
+  "kv_namespaces": [{ "binding": "NEXT_INC_CACHE_KV", "id": "04063a55524e4f148bebe174b9b4fbee" }],
   "durable_objects": {
     "bindings": [
       { "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" },
