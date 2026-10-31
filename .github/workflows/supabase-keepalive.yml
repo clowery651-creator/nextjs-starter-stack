@@ -1,0 +1,42 @@
+name: Supabase keep-alive
+
+# Free Supabase projects pause after ~7 days of inactivity.
+# This calls the public.keepalive() RPC (upserts ops.heartbeat) every 3 days.
+on:
+  schedule:
+    - cron: "17 9 */3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Ping Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call keepalive RPC
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_ANON_KEY secret is missing"; exit 1
+          fi
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o resp.txt -w '%{http_code}' --max-time 30 \
+              -X POST "${SUPABASE_URL%/}/rest/v1/rpc/keepalive" \
+              -H "apikey: ${SUPABASE_ANON_KEY}" \
+              -H "Content-Type: application/json" \
+              -d '{}') || code=000
+            echo "Attempt ${attempt}: HTTP ${code} -> $(cat resp.txt 2>/dev/null)"
+            if [ "${code}" = "200" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "::error::Supabase keep-alive failed"; exit 1
